@@ -8,6 +8,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import dotenv from 'dotenv';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 import { testConnection } from './utils/db.mjs';
 import routes from './routes/index.mjs';
@@ -26,6 +28,7 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 // Test database connection
 testConnection();
@@ -47,10 +50,7 @@ app.use(xss());
 // CORS configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production'
-    ? [
-        'https://my-personal-blog-2025-airo.vercel.app',
-        'https://your-frontend.netlify.app' // จะอัปเดตหลัง deploy Netlify
-      ]
+    ? ['https://my-personal-blog-2025-airo.vercel.app']
     : ['http://localhost:5173'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -111,5 +111,34 @@ app.get('/api/health', async (req, res) => {
 app.use(errorHandler);
 app.use(notFoundHandler);
 
-// Export app for Vercel
-export default app; 
+// สร้าง HTTP server จาก express app
+const server = http.createServer(app);
+
+// ตั้งค่า socket.io
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
+      process.env.FRONTEND_URL
+    ].filter(Boolean),
+    credentials: true
+  }
+});
+
+// ตัวอย่าง event สำหรับ dev/debug
+io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+// เริ่มต้น server
+server.listen(PORT, () => {
+  console.log(`✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨\n🌈 🚀 Server is running successfully! 🚀 🌈\n🔹 Environment: ${process.env.NODE_ENV}\n🔹 Port: ${PORT}\n🔹 Status: Online and ready!\n🔹 URLs: http://localhost:${PORT}\n🔹 API: http://localhost:${PORT}/api\n🔹 Health Check: http://localhost:${PORT}/api/health\n🔹 Time: ${new Date().toLocaleString()}\n🌟 Happy coding! 💻 ✨\n✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨`);
+});
+
+export { io }; 
