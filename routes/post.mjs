@@ -10,7 +10,7 @@ router.post('/:post_id/like', authenticateToken, async (req, res) => {
     const result = await likePost(req.params.post_id, req.user.id);
     res.json({
       status: 'success',
-      message: 'กดไลค์สำเร็จ',
+      message: 'Liked successfully',
       data: result
     });
   } catch (error) {
@@ -27,7 +27,7 @@ router.delete('/:post_id/like', authenticateToken, async (req, res) => {
     const result = await unlikePost(req.params.post_id, req.user.id);
     res.json({
       status: 'success',
-      message: 'ยกเลิกการกดไลค์สำเร็จ',
+      message: 'Unliked successfully',
       data: result
     });
   } catch (error) {

@@ -8,6 +8,7 @@ import { Op } from 'sequelize';
 import { cloudinary } from '../config/cloudinary.mjs';
 import { Readable } from 'stream';
 import { query } from '../utils/db.mjs';
+import { createNotification } from '../controllers/notificationController.mjs';
 
 const router = express.Router();
 
@@ -125,6 +126,15 @@ router.post('/', authenticateToken, upload.single('thumbnailImage'), async (req,
     const { title, content, categoryId, introduction, status } = req.body;
     const authorId = req.user.id;
 
+    console.log('Creating article:', { title, categoryId, status, hasFile: !!req.file });
+    console.log('File info:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      bufferLength: req.file.buffer?.length
+    } : 'No file');
+
     if (!title || !categoryId) {
       return res.status(400).json({
         status: 'error',
@@ -135,8 +145,10 @@ router.post('/', authenticateToken, upload.single('thumbnailImage'), async (req,
     let thumbnailUrl = null;
     if (req.file) {
       try {
+        console.log('Uploading to Cloudinary...');
         const result = await uploadToCloudinary(req.file.buffer);
         thumbnailUrl = result.secure_url;
+        console.log('Cloudinary upload successful:', thumbnailUrl);
       } catch (uploadError) {
         console.error('Error uploading to Cloudinary:', uploadError);
         return res.status(500).json({
@@ -144,6 +156,8 @@ router.post('/', authenticateToken, upload.single('thumbnailImage'), async (req,
           message: 'Failed to upload image'
         });
       }
+    } else {
+      console.log('No file uploaded');
     }
 
     const articleData = {
@@ -156,7 +170,93 @@ router.post('/', authenticateToken, upload.single('thumbnailImage'), async (req,
       thumbnail_url: thumbnailUrl
     };
 
+    console.log('Article data to create:', { ...articleData, thumbnail_url: thumbnailUrl });
     const article = await Article.create(articleData);
+    console.log('Article created:', { id: article.id, slug: article.slug, thumbnail_url: article.thumbnail_url });
+
+    // สร้าง notification สำหรับผู้ใช้คนอื่นๆ เมื่อ article ถูก publish
+    if (status === 'published') {
+      try {
+        // ดึงข้อมูลผู้เขียน
+        const authorResult = await query(
+          'SELECT username, full_name FROM users WHERE id = $1',
+          [authorId]
+        );
+        const author = authorResult.rows[0] || {};
+        const authorName = author.full_name || author.username || 'Someone';
+
+        // ดึงผู้ใช้ทั้งหมดยกเว้นผู้เขียน
+        const usersResult = await query(
+          'SELECT id FROM users WHERE id != $1',
+          [authorId]
+        );
+
+        // สร้าง notification ให้กับทุกคน (ยกเว้นผู้เขียน)
+        // สร้าง notification ให้ user คนแรกเพื่อ emit socket event ไปทุกคน
+        if (usersResult.rows.length > 0) {
+          const firstUser = usersResult.rows[0];
+          
+          // สร้าง notification ให้ user คนแรก (จะ emit socket event ไปทุกคน)
+          // ตรวจสอบ slug ถ้าไม่มีให้ query ใหม่
+          let articleSlug = article.slug;
+          if (!articleSlug) {
+            const slugResult = await query('SELECT slug FROM posts WHERE id = $1', [article.id]);
+            articleSlug = slugResult.rows[0]?.slug || article.id;
+          }
+          
+          await createNotification(
+            firstUser.id,
+            'post',
+            `${authorName} created a new post: ${title}`,
+            `/article/${articleSlug}`,
+            {
+              user_id: authorId,
+              post_id: article.id,
+              post_title: title,
+              post_slug: articleSlug
+            }
+          );
+
+          // สร้าง notification ให้ user คนอื่นๆ ใน database (ไม่ emit event ซ้ำ)
+          if (usersResult.rows.length > 1) {
+            // ตรวจสอบ slug ถ้ายังไม่มี
+            if (!articleSlug) {
+              const slugResult = await query('SELECT slug FROM posts WHERE id = $1', [article.id]);
+              articleSlug = slugResult.rows[0]?.slug || article.id;
+            }
+            
+            const notificationData = {
+              type: 'post',
+              message: `${authorName} created a new post: ${title}`,
+              link: `/article/${articleSlug}`,
+              data: JSON.stringify({
+                user_id: authorId,
+                post_id: article.id,
+                post_title: title,
+                post_slug: articleSlug
+              })
+            };
+
+            for (const user of usersResult.rows.slice(1)) {
+              await query(
+                `INSERT INTO notifications (user_id, type, message, link, data)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                  user.id,
+                  notificationData.type,
+                  notificationData.message,
+                  notificationData.link,
+                  notificationData.data
+                ]
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        // ไม่ให้ notification error ทำให้การสร้าง article ล้มเหลว
+        console.error('Error creating notifications:', notificationError);
+      }
+    }
 
     res.status(201).json({
       status: 'success',
@@ -201,12 +301,17 @@ router.put('/:id', authenticateToken, upload.single('thumbnailImage'), async (re
       }
     }
 
+    const oldStatus = article.status || 'draft';
+    const newStatus = status || oldStatus;
+    const wasDraft = oldStatus !== 'published';
+    const willBePublished = newStatus === 'published';
+
     const updateData = {
       title: title || article.title,
       content: content || article.content,
       category_id: categoryId ? parseInt(categoryId, 10) : article.category_id,
       introduction: introduction || article.introduction,
-      status: status || article.status,
+      status: newStatus,
       thumbnail_url: thumbnailUrl
     };
 
@@ -220,6 +325,84 @@ router.put('/:id', authenticateToken, upload.single('thumbnailImage'), async (re
         status: 'error',
         message: 'Failed to update article'
       });
+    }
+
+    // สร้าง notification เมื่อเปลี่ยนจาก draft เป็น published
+    if (wasDraft && willBePublished) {
+      try {
+        // ดึงข้อมูลผู้เขียน
+        const authorResult = await query(
+          'SELECT username, full_name FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        const author = authorResult.rows[0] || {};
+        const authorName = author.full_name || author.username || 'Someone';
+        const articleTitle = title || article.title;
+        
+        // ตรวจสอบ slug ถ้าไม่มีให้ query ใหม่
+        let articleSlug = updatedArticle.slug;
+        if (!articleSlug) {
+          const slugResult = await query('SELECT slug FROM posts WHERE id = $1', [updatedArticle.id]);
+          articleSlug = slugResult.rows[0]?.slug || updatedArticle.id;
+        }
+
+        // ดึงผู้ใช้ทั้งหมดยกเว้นผู้เขียน
+        const usersResult = await query(
+          'SELECT id FROM users WHERE id != $1',
+          [req.user.id]
+        );
+
+        // สร้าง notification ให้กับทุกคน (ยกเว้นผู้เขียน)
+        if (usersResult.rows.length > 0) {
+          const firstUser = usersResult.rows[0];
+          
+          // สร้าง notification ให้ user คนแรก (จะ emit socket event ไปทุกคน)
+          await createNotification(
+            firstUser.id,
+            'post',
+            `${authorName} created a new post: ${articleTitle}`,
+            `/article/${articleSlug}`,
+            {
+              user_id: req.user.id,
+              post_id: updatedArticle.id,
+              post_title: articleTitle,
+              post_slug: articleSlug
+            }
+          );
+
+          // สร้าง notification ให้ user คนอื่นๆ ใน database (ไม่ emit event ซ้ำ)
+          if (usersResult.rows.length > 1) {
+            const notificationData = {
+              type: 'post',
+              message: `${authorName} created a new post: ${articleTitle}`,
+              link: `/article/${articleSlug}`,
+              data: JSON.stringify({
+                user_id: req.user.id,
+                post_id: updatedArticle.id,
+                post_title: articleTitle,
+                post_slug: articleSlug
+              })
+            };
+
+            for (const user of usersResult.rows.slice(1)) {
+              await query(
+                `INSERT INTO notifications (user_id, type, message, link, data)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                  user.id,
+                  notificationData.type,
+                  notificationData.message,
+                  notificationData.link,
+                  notificationData.data
+                ]
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        // ไม่ให้ notification error ทำให้การอัปเดต article ล้มเหลว
+        console.error('Error creating notifications:', notificationError);
+      }
     }
 
     res.json({

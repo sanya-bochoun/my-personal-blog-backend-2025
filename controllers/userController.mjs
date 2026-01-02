@@ -19,7 +19,7 @@ const updateProfile = async (req, res) => {
     if (userCheck.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -29,7 +29,7 @@ const updateProfile = async (req, res) => {
       if (usernameCheck.rows.length > 0) {
         return res.status(400).json({
           status: 'error',
-          message: 'ชื่อผู้ใช้นี้ถูกใช้งานแล้ว กรุณาเลือกชื่อผู้ใช้อื่น'
+          message: 'Username is already taken. Please choose another username'
         });
       }
     }
@@ -67,7 +67,7 @@ const updateProfile = async (req, res) => {
     if (updateFields.length === 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'ไม่มีข้อมูลที่ต้องการอัปเดต'
+        message: 'No data to update'
       });
     }
 
@@ -91,7 +91,7 @@ const updateProfile = async (req, res) => {
 
     res.json({
       status: 'success',
-      message: 'อัปเดตโปรไฟล์สำเร็จ',
+      message: 'Profile updated successfully',
       data: {
         user: updatedUser
       }
@@ -100,7 +100,7 @@ const updateProfile = async (req, res) => {
     console.error('Update profile error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการอัปเดตโปรไฟล์',
+      message: 'Failed to update profile',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -130,7 +130,7 @@ const uploadAvatar = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({
         status: 'error',
-        message: 'ไม่พบไฟล์รูปภาพ'
+        message: 'Image file not found'
       });
     }
 
@@ -139,7 +139,7 @@ const uploadAvatar = async (req, res) => {
     if (userCheck.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -158,7 +158,7 @@ const uploadAvatar = async (req, res) => {
           console.error('Cloudinary upload error:', error);
           return res.status(500).json({
             status: 'error',
-            message: 'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ'
+            message: 'Failed to upload image'
           });
         }
 
@@ -176,7 +176,7 @@ const uploadAvatar = async (req, res) => {
 
           res.json({
             status: 'success',
-            message: 'อัปโหลดรูปภาพโปรไฟล์สำเร็จ',
+            message: 'Profile image uploaded successfully',
             data: {
               user: updatedUser
             }
@@ -185,7 +185,7 @@ const uploadAvatar = async (req, res) => {
           console.error('Database update error:', dbError);
           res.status(500).json({
             status: 'error',
-            message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูลผู้ใช้'
+            message: 'Failed to update user information'
           });
         }
       }
@@ -198,7 +198,7 @@ const uploadAvatar = async (req, res) => {
     console.error('Upload avatar error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการอัปโหลดรูปภาพโปรไฟล์',
+      message: 'Failed to upload profile image',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -217,7 +217,7 @@ const changePassword = async (req, res) => {
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -228,7 +228,7 @@ const changePassword = async (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({
         status: 'error',
-        message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง'
+        message: 'Current password is incorrect'
       });
     }
 
@@ -244,13 +244,13 @@ const changePassword = async (req, res) => {
 
     res.json({
       status: 'success',
-      message: 'เปลี่ยนรหัสผ่านสำเร็จ'
+      message: 'Password changed successfully'
     });
   } catch (error) {
     console.error('Change password error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน',
+      message: 'Failed to change password',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -271,7 +271,7 @@ export const getProfile = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -287,7 +287,7 @@ export const getProfile = async (req, res) => {
     console.error('Get profile error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลโปรไฟล์',
+      message: 'Failed to fetch profile',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -305,7 +305,7 @@ export const resetPassword = async (req, res) => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({
         status: 'error',
-        message: 'กรุณากรอกข้อมูลให้ครบถ้วน'
+        message: 'Please fill in all required fields'
       });
     }
 
@@ -313,7 +313,7 @@ export const resetPassword = async (req, res) => {
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         status: 'error',
-        message: 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน'
+        message: 'New password and confirm password do not match'
       });
     }
 
@@ -321,7 +321,7 @@ export const resetPassword = async (req, res) => {
     if (newPassword.length < 6) {
       return res.status(400).json({
         status: 'error',
-        message: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร'
+        message: 'New password must be at least 6 characters long'
       });
     }
 
@@ -331,7 +331,7 @@ export const resetPassword = async (req, res) => {
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -344,7 +344,7 @@ export const resetPassword = async (req, res) => {
     if (!isValidPassword) {
       return res.status(400).json({
         status: 'error',
-        message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง'
+        message: 'Current password is incorrect'
       });
     }
 
@@ -359,13 +359,13 @@ export const resetPassword = async (req, res) => {
 
     res.json({
       status: 'success',
-      message: 'เปลี่ยนรหัสผ่านสำเร็จ'
+      message: 'Password changed successfully'
     });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน'
+      message: 'Failed to change password'
     });
   }
 };

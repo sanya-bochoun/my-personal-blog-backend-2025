@@ -1,24 +1,13 @@
 import { Article } from '../../models/Article.mjs';
 import { Category } from '../../models/Category.mjs';
+import { createNotification } from '../notificationController.mjs';
+import { query } from '../../utils/db.mjs';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { cloudinary } from '../../config/cloudinary.mjs';
+import { Readable } from 'stream';
 
-// ตั้งค่า multer สำหรับอัพโหลดไฟล์
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = 'uploads/articles';
-    // สร้างโฟลเดอร์ถ้ายังไม่มี
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// ตั้งค่า multer สำหรับอัพโหลดไฟล์ (ใช้ memory storage สำหรับ Cloudinary)
+const storage = multer.memoryStorage();
 
 export const upload = multer({ 
   storage: storage,
@@ -27,13 +16,33 @@ export const upload = multer({
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('ประเภทไฟล์ไม่ถูกต้อง อนุญาตเฉพาะ JPEG, PNG, GIF และ WEBP เท่านั้น'));
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF and WEBP are allowed'));
     }
   },
   limits: {
     fileSize: 5 * 1024 * 1024 // จำกัดขนาด 5MB
   }
 });
+
+// Function to upload buffer to Cloudinary
+const uploadToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'articles',
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+
+    const readableStream = new Readable();
+    readableStream.push(buffer);
+    readableStream.push(null);
+    readableStream.pipe(uploadStream);
+  });
+};
 
 // สร้างบทความใหม่
 export const createArticle = async (req, res) => {
@@ -44,8 +53,25 @@ export const createArticle = async (req, res) => {
     if (!title || !category_id) {
       return res.status(400).json({
         success: false,
-        message: 'ต้องระบุชื่อบทความและหมวดหมู่'
+        message: 'Title and category are required'
       });
+    }
+
+    // อัพโหลดรูปภาพไปยัง Cloudinary (ถ้ามี)
+    let thumbnailUrl = null;
+    if (req.file) {
+      try {
+        console.log('Uploading to Cloudinary...');
+        const result = await uploadToCloudinary(req.file.buffer);
+        thumbnailUrl = result.secure_url;
+        console.log('Cloudinary upload successful:', thumbnailUrl);
+      } catch (uploadError) {
+        console.error('Error uploading to Cloudinary:', uploadError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to upload image'
+        });
+      }
     }
 
     // สร้างข้อมูลบทความ
@@ -56,22 +82,92 @@ export const createArticle = async (req, res) => {
       author_id: req.user.id, // ได้จาก middleware การยืนยันตัวตน
       introduction: introduction || '', // จะถูกบันทึกเป็น excerpt ในตาราง posts
       status: status || 'draft', // จะถูกแปลงเป็น Boolean (published) ในโมเดล
-      thumbnail_image: req.file ? `/uploads/articles/${req.file.filename}` : null // จะถูกบันทึกเป็น featured_image
+      thumbnail_url: thumbnailUrl
     };
 
     // บันทึกลงฐานข้อมูล
     const article = await Article.create(articleData);
 
+    // สร้าง notification สำหรับผู้ใช้คนอื่นๆ เมื่อ article ถูก publish
+    if (status === 'published') {
+      try {
+        // ดึงข้อมูลผู้เขียน
+        const authorResult = await query(
+          'SELECT username, full_name FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        const author = authorResult.rows[0] || {};
+        const authorName = author.full_name || author.username || 'Someone';
+
+        // ตรวจสอบ slug ถ้าไม่มีให้ query ใหม่
+        let articleSlug = article.slug;
+        if (!articleSlug) {
+          const slugResult = await query('SELECT slug FROM posts WHERE id = $1', [article.id]);
+          articleSlug = slugResult.rows[0]?.slug || article.id;
+        }
+
+        // ดึงผู้ใช้ทั้งหมดยกเว้นผู้เขียน
+        const usersResult = await query(
+          'SELECT id FROM users WHERE id != $1',
+          [req.user.id]
+        );
+
+        // สร้าง notification ให้กับทุกคน (ยกเว้นผู้เขียน)
+        if (usersResult.rows.length > 0) {
+          const notificationData = {
+            type: 'post',
+            message: `${authorName} created a new post: ${title}`,
+            link: `/article/${articleSlug}`,
+            data: {
+              user_id: req.user.id,
+              post_id: article.id,
+              post_title: title,
+              post_slug: articleSlug
+            }
+          };
+
+          // สร้าง notification ให้ user คนแรก (จะ emit socket event ไปทุกคน)
+          await createNotification(
+            usersResult.rows[0].id,
+            notificationData.type,
+            notificationData.message,
+            notificationData.link,
+            notificationData.data
+          );
+
+          // สร้าง notification ให้ user คนอื่นๆ ใน database (ไม่ emit event ซ้ำเพราะ io.emit ส่งไปทุกคนแล้ว)
+          if (usersResult.rows.length > 1) {
+            for (const user of usersResult.rows.slice(1)) {
+              await query(
+                `INSERT INTO notifications (user_id, type, message, link, data)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                  user.id,
+                  notificationData.type,
+                  notificationData.message,
+                  notificationData.link,
+                  JSON.stringify(notificationData.data)
+                ]
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        // ไม่ให้ notification error ทำให้การสร้าง article ล้มเหลว
+        console.error('Error creating notifications:', notificationError);
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: 'สร้างบทความสำเร็จ',
+      message: 'Article created successfully',
       data: article
     });
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการสร้างบทความ:', error);
+    console.error('Error creating article:', error);
     res.status(500).json({
       success: false,
-      message: 'เกิดข้อผิดพลาดในการสร้างบทความ',
+      message: 'Failed to create article',
       error: error.message
     });
   }
@@ -97,10 +193,10 @@ export const getAllArticles = async (req, res) => {
       data: articles
     });
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการดึงข้อมูลบทความ:', error);
+    console.error('Error fetching articles:', error);
     res.status(500).json({
       success: false,
-      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลบทความ',
+      message: 'Failed to fetch articles',
       error: error.message
     });
   }
@@ -122,7 +218,7 @@ export const getArticleById = async (req, res) => {
     if (!article) {
       return res.status(404).json({
         success: false,
-        message: 'ไม่พบบทความ'
+        message: 'Article not found'
       });
     }
 
@@ -131,10 +227,10 @@ export const getArticleById = async (req, res) => {
       data: article
     });
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการดึงข้อมูลบทความ:', error);
+    console.error('Error fetching articles:', error);
     res.status(500).json({
       success: false,
-      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลบทความ',
+      message: 'Failed to fetch articles',
       error: error.message
     });
   }
@@ -148,45 +244,126 @@ export const updateArticle = async (req, res) => {
     if (!article) {
       return res.status(404).json({
         success: false,
-        message: 'ไม่พบบทความ'
+        message: 'Article not found'
       });
     }
 
     const { title, introduction, content, category_id, status } = req.body;
     
     // จัดการรูปภาพหากมีการอัปโหลดใหม่
-    let thumbnail_image = article.thumbnail_image;
+    let thumbnail_url = article.thumbnail_url;
     if (req.file) {
-      // ลบรูปเก่าหากมี
-      if (article.thumbnail_image) {
-        const oldImagePath = path.join(process.cwd(), article.thumbnail_image.replace('/', ''));
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
+      try {
+        console.log('Uploading new image to Cloudinary...');
+        const result = await uploadToCloudinary(req.file.buffer);
+        thumbnail_url = result.secure_url;
+        console.log('Cloudinary upload successful:', thumbnail_url);
+      } catch (uploadError) {
+        console.error('Error uploading to Cloudinary:', uploadError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to upload image'
+        });
       }
-      thumbnail_image = `/uploads/articles/${req.file.filename}`;
     }
+
+    // ตรวจสอบ status เดิม (Article.findByPk จะแปลง published เป็น status string แล้ว)
+    const oldStatus = article.status || (article.published ? 'published' : 'draft');
+    const newStatus = status || oldStatus;
+    const wasDraft = oldStatus !== 'published';
+    const willBePublished = newStatus === 'published';
 
     // อัปเดตข้อมูล
     const updatedArticle = await Article.update(req.params.id, {
       title: title || article.title,
       introduction: introduction !== undefined ? introduction : article.introduction,
       content: content !== undefined ? content : article.content,
-      thumbnail_image,
+      thumbnail_url,
       category_id: category_id ? parseInt(category_id) : article.category_id,
-      status: status || article.status
+      status: newStatus
     });
+
+    // สร้าง notification เมื่อเปลี่ยนจาก draft เป็น published
+    if (wasDraft && willBePublished) {
+      try {
+        // ดึงข้อมูลผู้เขียน
+        const authorResult = await query(
+          'SELECT username, full_name FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        const author = authorResult.rows[0] || {};
+        const authorName = author.full_name || author.username || 'Someone';
+        const articleTitle = title || article.title;
+        
+        // ตรวจสอบ slug ถ้าไม่มีให้ query ใหม่
+        let articleSlug = updatedArticle.slug;
+        if (!articleSlug) {
+          const slugResult = await query('SELECT slug FROM posts WHERE id = $1', [updatedArticle.id]);
+          articleSlug = slugResult.rows[0]?.slug || updatedArticle.id;
+        }
+
+        // ดึงผู้ใช้ทั้งหมดยกเว้นผู้เขียน
+        const usersResult = await query(
+          'SELECT id FROM users WHERE id != $1',
+          [req.user.id]
+        );
+
+        // สร้าง notification ให้กับทุกคน (ยกเว้นผู้เขียน)
+        if (usersResult.rows.length > 0) {
+          const notificationData = {
+            type: 'post',
+            message: `${authorName} created a new post: ${articleTitle}`,
+            link: `/article/${articleSlug}`,
+            data: {
+              user_id: req.user.id,
+              post_id: updatedArticle.id,
+              post_title: articleTitle,
+              post_slug: articleSlug
+            }
+          };
+
+          // สร้าง notification ให้ user คนแรก (จะ emit socket event ไปทุกคน)
+          await createNotification(
+            usersResult.rows[0].id,
+            notificationData.type,
+            notificationData.message,
+            notificationData.link,
+            notificationData.data
+          );
+
+          // สร้าง notification ให้ user คนอื่นๆ ใน database (ไม่ emit event ซ้ำเพราะ io.emit ส่งไปทุกคนแล้ว)
+          if (usersResult.rows.length > 1) {
+            for (const user of usersResult.rows.slice(1)) {
+              await query(
+                `INSERT INTO notifications (user_id, type, message, link, data)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [
+                  user.id,
+                  notificationData.type,
+                  notificationData.message,
+                  notificationData.link,
+                  JSON.stringify(notificationData.data)
+                ]
+              );
+            }
+          }
+        }
+      } catch (notificationError) {
+        // ไม่ให้ notification error ทำให้การอัปเดต article ล้มเหลว
+        console.error('Error creating notifications:', notificationError);
+      }
+    }
 
     res.json({
       success: true,
-      message: 'อัปเดตบทความสำเร็จ',
+      message: 'Article updated successfully',
       data: updatedArticle
     });
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการอัปเดตบทความ:', error);
+    console.error('Error updating article:', error);
     res.status(500).json({
       success: false,
-      message: 'เกิดข้อผิดพลาดในการอัปเดตบทความ',
+      message: 'Failed to update article',
       error: error.message
     });
   }
@@ -200,30 +377,24 @@ export const deleteArticle = async (req, res) => {
     if (!article) {
       return res.status(404).json({
         success: false,
-        message: 'ไม่พบบทความ'
+        message: 'Article not found'
       });
     }
 
-    // ลบรูปภาพถ้ามี
-    if (article.thumbnail_image) {
-      const imagePath = path.join(process.cwd(), article.thumbnail_image.replace('/', ''));
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
+    // ไม่ต้องลบรูปภาพจาก Cloudinary (Cloudinary จัดการเอง)
 
     // ลบบทความจากฐานข้อมูล
     await Article.destroy(req.params.id);
 
     res.json({
       success: true,
-      message: 'ลบบทความสำเร็จ'
+      message: 'Article deleted successfully'
     });
   } catch (error) {
-    console.error('เกิดข้อผิดพลาดในการลบบทความ:', error);
+    console.error('Error deleting article:', error);
     res.status(500).json({
       success: false,
-      message: 'เกิดข้อผิดพลาดในการลบบทความ',
+      message: 'Failed to delete article',
       error: error.message
     });
   }

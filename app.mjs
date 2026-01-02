@@ -11,8 +11,8 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-production-domain.com'] // เปลี่ยนเป็น domain จริงในโหมด production
-    : ['http://localhost:5173'],
+    ? ['https://my-personal-blog-five.vercel.app'] // เปลี่ยนเป็น domain จริงใน production
+    : ['http://localhost:5173', 'http://localhost:5174'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [

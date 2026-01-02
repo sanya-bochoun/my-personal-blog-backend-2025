@@ -28,7 +28,7 @@ const register = async (req, res) => {
       console.log('[REGISTER] User already exists');
       return res.status(409).json({
         status: 'error',
-        message: 'อีเมลหรือชื่อผู้ใช้นี้มีในระบบแล้ว'
+        message: 'Email or username already exists'
       });
     }
 
@@ -75,7 +75,7 @@ const register = async (req, res) => {
       console.log('[REGISTER] Registration successful');
       res.status(201).json({
         status: 'success',
-        message: 'ลงทะเบียนสำเร็จ',
+        message: 'Registration successful',
         data: {
           user: result.rows[0],
           accessToken,
@@ -88,7 +88,7 @@ const register = async (req, res) => {
       if (dbError.message && dbError.message.includes('relation') && dbError.message.includes('does not exist')) {
         return res.status(500).json({
           status: 'error',
-          message: 'ตารางในฐานข้อมูลยังไม่ได้ถูกสร้าง กรุณาทำการ migration ก่อน',
+          message: 'Database tables have not been created. Please run migrations first',
           details: dbError.message
         });
       }
@@ -98,7 +98,7 @@ const register = async (req, res) => {
     console.error('[REGISTER] Error during registration:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการลงทะเบียน',
+      message: 'Registration failed',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -145,7 +145,7 @@ const login = async (req, res) => {
       console.log('[LOGIN] Missing email/username');
       return res.status(400).json({
         status: 'error',
-        message: 'กรุณาระบุอีเมลหรือชื่อผู้ใช้'
+        message: 'Please provide email or username'
       });
     }
 
@@ -158,7 +158,7 @@ const login = async (req, res) => {
       console.log('[LOGIN] User not found');
       return res.status(401).json({
         status: 'error',
-        message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+        message: 'Invalid email or password'
       });
     }
 
@@ -170,7 +170,7 @@ const login = async (req, res) => {
       console.log('[LOGIN] Account is locked');
       return res.status(403).json({
         status: 'error',
-        message: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'
+        message: 'This account has been locked. Please contact the administrator'
       });
     }
 
@@ -183,7 +183,7 @@ const login = async (req, res) => {
       console.log('[LOGIN] Password incorrect');
       return res.status(401).json({
         status: 'error',
-        message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+        message: 'Invalid email or password'
       });
     }
 
@@ -224,7 +224,7 @@ const login = async (req, res) => {
     console.log('[LOGIN] Login successful!');
     res.json({
       status: 'success',
-      message: 'เข้าสู่ระบบสำเร็จ',
+      message: 'Login successful',
       data: {
         user: {
           id: user.id,
@@ -242,7 +242,7 @@ const login = async (req, res) => {
     console.error('[LOGIN] Login error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ'
+      message: 'Login failed'
     });
   }
 };
@@ -262,7 +262,7 @@ const getProfile = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบข้อมูลผู้ใช้'
+        message: 'User not found'
       });
     }
 
@@ -276,7 +276,7 @@ const getProfile = async (req, res) => {
     console.error('Get profile error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลผู้ใช้'
+      message: 'Failed to fetch user profile'
     });
   }
 };
@@ -299,7 +299,7 @@ const refreshToken = async (req, res) => {
     if (tokenResult.rows.length === 0) {
       return res.status(401).json({
         status: 'error',
-        message: 'Refresh token ไม่ถูกต้องหรือหมดอายุ'
+        message: 'Refresh token is invalid or expired'
       });
     }
 
@@ -322,7 +322,7 @@ const refreshToken = async (req, res) => {
     console.error('Refresh token error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการรีเฟรช token'
+      message: 'Failed to refresh token'
     });
   }
 };
@@ -342,13 +342,13 @@ const logout = async (req, res) => {
 
     res.json({
       status: 'success',
-      message: 'ออกจากระบบสำเร็จ'
+      message: 'Logout successful'
     });
   } catch (error) {
     console.error('Logout error:', error.message);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการออกจากระบบ'
+      message: 'Logout failed'
     });
   }
 };
@@ -365,7 +365,7 @@ const forgotPassword = async (req, res) => {
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบอีเมลนี้ในระบบ'
+        message: 'Email not found'
       });
     }
 
@@ -385,7 +385,7 @@ const forgotPassword = async (req, res) => {
       
       res.json({
         status: 'success',
-        message: 'ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว'
+        message: 'Password reset link has been sent to your email'
       });
     } catch (emailError) {
       console.error('Error sending email:', emailError);
@@ -396,13 +396,16 @@ const forgotPassword = async (req, res) => {
         [email]
       );
       
-      throw new Error('ไม่สามารถส่งอีเมลได้');
+      // Provide more specific error message
+      const errorMessage = emailError.message || 'Failed to send email';
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error('Forgot password error:', error);
+    const errorMessage = error.message || 'An error occurred';
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการดำเนินการ',
+      message: errorMessage,
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

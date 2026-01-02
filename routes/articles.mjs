@@ -187,7 +187,7 @@ router.get('/detail/:slug', async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ 
         status: 'error',
-        message: 'ไม่พบบทความที่ต้องการ' 
+        message: 'Article not found' 
       });
     }
     
@@ -199,7 +199,7 @@ router.get('/detail/:slug', async (req, res) => {
     console.error('Error fetching article:', error);
     res.status(500).json({ 
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการดึงข้อมูลบทความ'
+      message: 'Failed to fetch article'
     });
   }
 });

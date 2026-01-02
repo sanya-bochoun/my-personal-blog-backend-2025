@@ -6,9 +6,9 @@ export const createComment = async (req, res) => {
     const { content, post_id } = req.body;
     const user_id = req.user.id;
 
-    // Get post author id
+    // Get post author id and slug
     const postResult = await query(
-      'SELECT author_id, title FROM posts WHERE id = $1',
+      'SELECT author_id, title, slug FROM posts WHERE id = $1',
       [post_id]
     );
 
@@ -36,15 +36,18 @@ export const createComment = async (req, res) => {
       
       const username = userResult.rows[0]?.username || 'Someone';
       
+      const articleLink = post.slug ? `/article/${post.slug}` : `/article/${post_id}`;
+      
       await createNotification(
         post.author_id,
         'comment',
         `${username} commented on your post: ${post.title}`,
-        `/posts/${post_id}`,
+        articleLink,
         {
           comment_id: result.rows[0].id,
           post_id: post_id,
-          comment_content: content
+          comment_content: content,
+          post_slug: post.slug
         }
       );
     }

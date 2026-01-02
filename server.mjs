@@ -33,31 +33,40 @@ const PORT = process.env.PORT || 5000;
 // Test database connection
 testConnection();
 
+// CORS configuration - ต้องมาก่อน middleware อื่นๆ
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://my-personal-blog-2025-airo.vercel.app']
+    : [
+        'http://localhost:5173', 
+        'http://localhost:5174',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174'
+      ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
 // Security Middleware
 // 1. Helmet - Set HTTP headers for security
 app.use(helmet());
 
 // 2. Rate Limiting - Prevent brute force and DOS attacks
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit 100 requests per IP in 15 minutes
-  message: 'Too many requests from this IP, please try again later.'
-}));
+// ปิดใน development เพื่อความสะดวกในการพัฒนา
+// เปิดเฉพาะใน production เพื่อความปลอดภัย
+if (process.env.NODE_ENV === 'production') {
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit 100 requests per IP in 15 minutes
+    message: 'Too many requests from this IP, please try again later.'
+  }));
+}
 
 // 3. Data Sanitization - Prevent XSS attacks
 app.use(xss());
-
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://my-personal-blog-2025-airo.vercel.app']
-    : ['http://localhost:5173'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
 
 // Body Parser Middleware
 app.use(express.json({ limit: '10kb' })); // จำกัดขนาด request body
@@ -136,9 +145,13 @@ io.on('connection', (socket) => {
   });
 });
 
-// เริ่มต้น server
-server.listen(PORT, () => {
-  console.log(`✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨\n🌈 🚀 Server is running successfully! 🚀 🌈\n🔹 Environment: ${process.env.NODE_ENV}\n🔹 Port: ${PORT}\n🔹 Status: Online and ready!\n🔹 URLs: http://localhost:${PORT}\n🔹 API: http://localhost:${PORT}/api\n🔹 Health Check: http://localhost:${PORT}/api/health\n🔹 Time: ${new Date().toLocaleString()}\n🌟 Happy coding! 💻 ✨\n✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨`);
-});
+// เริ่มต้น server (สำหรับ local development)
+if (process.env.NODE_ENV !== 'production') {
+  server.listen(PORT, () => {
+    console.log(`✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨\n🌈 🚀 Server is running successfully! 🚀 🌈\n🔹 Environment: ${process.env.NODE_ENV}\n🔹 Port: ${PORT}\n🔹 Status: Online and ready!\n🔹 URLs: http://localhost:${PORT}\n🔹 API: http://localhost:${PORT}/api\n🔹 Health Check: http://localhost:${PORT}/api/health\n🔹 Time: ${new Date().toLocaleString()}\n🌟 Happy coding! 💻 ✨\n✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨`);
+  });
+}
 
+// Export app สำหรับ Vercel
+export default app;
 export { io }; 

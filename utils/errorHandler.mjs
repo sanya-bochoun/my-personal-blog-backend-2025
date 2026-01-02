@@ -47,7 +47,7 @@ export const errorHandler = (err, req, res, next) => {
       console.error('ERROR 💥', err);
       res.status(500).json({
         status: 'error',
-        message: 'เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่อีกครั้ง'
+        message: 'Something went wrong. Please try again'
       });
     }
   }

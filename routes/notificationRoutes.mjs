@@ -3,7 +3,8 @@ import {
   getNotifications, 
   markAsRead, 
   markAllAsRead, 
-  deleteNotification 
+  deleteNotification,
+  deleteAllNotifications
 } from '../controllers/notificationController.mjs';
 import { protect } from '../middleware/authMiddleware.mjs';
 
@@ -20,6 +21,9 @@ router.put('/:id/read', markAsRead);
 
 // ทำเครื่องหมายว่าอ่านทั้งหมดแล้ว
 router.put('/read-all', markAllAsRead);
+
+// ลบการแจ้งเตือนทั้งหมด (ต้องอยู่ก่อน /:id เพื่อไม่ให้ conflict)
+router.delete('/all', deleteAllNotifications);
 
 // ลบการแจ้งเตือน
 router.delete('/:id', deleteNotification);

@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/auth.mjs';
+import { authenticateToken, optionalAuthenticate } from '../middleware/auth.mjs';
 import { query } from '../utils/db.mjs';
 import { createNotification } from '../controllers/notificationController.mjs';
 
@@ -135,7 +135,7 @@ router.post('/articles/:articleId/like', authenticateToken, async (req, res) => 
     );
 
     if (postResult.rows.length === 0) {
-      return res.status(404).json({ message: 'บทความไม่พบในระบบ' });
+      return res.status(404).json({ message: 'Post not found' });
     }
 
     const post = postResult.rows[0];
@@ -147,7 +147,7 @@ router.post('/articles/:articleId/like', authenticateToken, async (req, res) => 
     );
 
     if (existingLike.rows.length > 0) {
-      return res.status(400).json({ message: 'คุณได้กดไลค์บทความนี้ไปแล้ว' });
+      return res.status(400).json({ message: 'You have already liked this post' });
     }
 
     // Add new like
@@ -163,12 +163,12 @@ router.post('/articles/:articleId/like', authenticateToken, async (req, res) => 
         [userId]
       );
       
-      const username = userResult.rows[0]?.username || 'ผู้ใช้งาน';
+      const username = userResult.rows[0]?.username || 'User';
       
       await createNotification(
         post.author_id,
         'post_like',
-        `${username} ได้กดไลค์บทความของคุณ: ${post.title}`,
+        `${username} liked your post: ${post.title}`,
         `/posts/${articleId}`,
         {
           post_id: articleId,
@@ -177,10 +177,10 @@ router.post('/articles/:articleId/like', authenticateToken, async (req, res) => 
       );
     }
 
-    res.status(201).json({ message: 'กดไลค์บทความเรียบร้อยแล้ว' });
+    res.status(201).json({ message: 'Post liked successfully' });
   } catch (error) {
     console.error('Error adding post like:', error);
-    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการกดไลค์บทความ' });
+    res.status(500).json({ message: 'Failed to like post' });
   }
 });
 
@@ -196,20 +196,26 @@ router.delete('/articles/:articleId/like', authenticateToken, async (req, res) =
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ message: 'ไม่พบการกดไลค์บทความนี้' });
+      return res.status(404).json({ message: 'Like not found' });
     }
 
-    res.json({ message: 'ยกเลิกการกดไลค์บทความเรียบร้อยแล้ว' });
+    res.json({ message: 'Post unliked successfully' });
   } catch (error) {
     console.error('Error removing post like:', error);
-    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการยกเลิกการกดไลค์บทความ' });
+    res.status(500).json({ message: 'Failed to unlike post' });
   }
 });
 
-// Check if user has liked a post
-router.get('/articles/:articleId/check', authenticateToken, async (req, res) => {
+// Check if user has liked a post (optional auth - ถ้าไม่มี token ก็ return false)
+router.get('/articles/:articleId/check', optionalAuthenticate, async (req, res) => {
   try {
     const { articleId } = req.params;
+    
+    // ถ้าไม่มี user (ไม่ได้ login) ให้ return false
+    if (!req.user || !req.user.id) {
+      return res.json({ hasLiked: false });
+    }
+    
     const userId = req.user.id;
 
     const result = await query(
@@ -220,7 +226,7 @@ router.get('/articles/:articleId/check', authenticateToken, async (req, res) => 
     res.json({ hasLiked: result.rows.length > 0 });
   } catch (error) {
     console.error('Error checking post like status:', error);
-    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสถานะการกดไลค์' });
+    res.status(500).json({ message: 'Failed to check like status' });
   }
 });
 

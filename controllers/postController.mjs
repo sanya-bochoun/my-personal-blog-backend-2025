@@ -66,6 +66,7 @@ export const getPosts = async ({ page = 1, limit = 10, category, author, tag, se
     return {
       posts: result.rows.map(post => ({
         ...post,
+        thumbnail_url: post.thumbnail_url || post.featured_image || null,
         total_count: undefined
       })),
       pagination: {
@@ -139,7 +140,15 @@ export const getPostBySlug = async (slug) => {
       [slug]
     );
 
-    return result.rows[0] || null;
+    if (!result.rows[0]) {
+      return null;
+    }
+
+    const post = result.rows[0];
+    return {
+      ...post,
+      thumbnail_url: post.thumbnail_url || post.featured_image || null
+    };
   } catch (error) {
     throw new Error(`Failed to fetch post: ${error.message}`);
   }
@@ -283,7 +292,7 @@ export const likePost = async (postId, userId) => {
     // Check if post exists
     const post = await query('SELECT id FROM posts WHERE id = $1', [postId]);
     if (post.rows.length === 0) {
-      throw new Error('ไม่พบบทความที่ต้องการ');
+      throw new Error('Post not found');
     }
 
     // Check if already liked
@@ -293,7 +302,7 @@ export const likePost = async (postId, userId) => {
     );
 
     if (existingLike.rows.length > 0) {
-      throw new Error('คุณได้กดไลค์บทความนี้ไปแล้ว');
+      throw new Error('You have already liked this post');
     }
 
     // Add like
@@ -322,7 +331,7 @@ export const unlikePost = async (postId, userId) => {
     // Check if post exists
     const post = await query('SELECT id FROM posts WHERE id = $1', [postId]);
     if (post.rows.length === 0) {
-      throw new Error('ไม่พบบทความที่ต้องการ');
+      throw new Error('Post not found');
     }
 
     // Check if like exists
@@ -332,7 +341,7 @@ export const unlikePost = async (postId, userId) => {
     );
 
     if (existingLike.rows.length === 0) {
-      throw new Error('คุณยังไม่ได้กดไลค์บทความนี้');
+      throw new Error('You have not liked this post yet');
     }
 
     // Remove like
@@ -361,7 +370,7 @@ export const getPostLikes = async (postId, userId = null) => {
     // Check if post exists first
     const post = await query('SELECT id FROM posts WHERE id = $1', [postId]);
     if (post.rows.length === 0) {
-      throw new Error('ไม่พบบทความที่ต้องการ');
+      throw new Error('Post not found');
     }
 
     const likesCount = await query(

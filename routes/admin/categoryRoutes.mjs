@@ -18,7 +18,7 @@ router.post('/', async (req, res) => {
         if (!name) {
             return res.status(400).json({
                 status: 'error',
-                message: 'กรุณาระบุชื่อหมวดหมู่'
+                message: 'Category name is required'
             });
         }
 
@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
         if (categoryExists.rows.length > 0) {
             return res.status(409).json({
                 status: 'error',
-                message: 'ชื่อหมวดหมู่นี้มีอยู่ในระบบแล้ว'
+                message: 'Category name already exists'
             });
         }
 
@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
         console.error('Error creating category:', err);
         res.status(500).json({
             status: 'error',
-            message: 'เกิดข้อผิดพลาดในการสร้างหมวดหมู่'
+            message: 'Failed to create category'
         });
     }
 });
@@ -83,7 +83,7 @@ router.get('/search', async (req, res) => {
         if (!q) {
             return res.status(400).json({
                 status: 'error',
-                message: 'กรุณาระบุคำค้นหา'
+                message: 'Search query is required'
             });
         }
 
@@ -106,7 +106,7 @@ router.get('/search', async (req, res) => {
         console.error('Error searching categories:', err);
         res.status(500).json({
             status: 'error',
-            message: 'เกิดข้อผิดพลาดในการค้นหาหมวดหมู่'
+            message: 'Failed to search categories'
         });
     }
 });
@@ -124,7 +124,7 @@ router.get('/:id', async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({
                 status: 'error',
-                message: 'ไม่พบหมวดหมู่ที่ต้องการ'
+                message: 'Category not found'
             });
         }
 
@@ -136,7 +136,7 @@ router.get('/:id', async (req, res) => {
         console.error('Error fetching category:', err);
         res.status(500).json({
             status: 'error',
-            message: 'เกิดข้อผิดพลาดในการดึงข้อมูลหมวดหมู่'
+            message: 'Failed to fetch category'
         });
     }
 });
@@ -176,7 +176,7 @@ router.delete('/:id', async (req, res) => {
         
         res.json({ message: 'Category deleted successfully' });
     } catch (error) {
-        if (error.message === 'ไม่สามารถลบหมวดหมู่ที่มีบทความอยู่ได้') {
+        if (error.message === 'Cannot delete category that has articles') {
             return res.status(400).json({ error: error.message });
         }
         console.error('Error deleting category:', error);

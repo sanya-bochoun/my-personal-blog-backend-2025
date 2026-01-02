@@ -9,7 +9,7 @@ export const likePost = async (req, res) => {
 
     // Check if post exists and get author info
     const postResult = await query(
-      'SELECT p.author_id, p.title, u.username FROM posts p JOIN users u ON p.author_id = u.id WHERE p.id = $1',
+      'SELECT p.author_id, p.title, p.slug, u.username FROM posts p JOIN users u ON p.author_id = u.id WHERE p.id = $1',
       [post_id]
     );
 
@@ -56,14 +56,17 @@ export const likePost = async (req, res) => {
       
       const username = userResult.rows[0]?.username || 'Someone';
       
+      const articleLink = post.slug ? `/article/${post.slug}` : `/article/${post_id}`;
+      
       await createNotification(
         post.author_id,
         'post_like',
         `${username} liked your post: ${post.title}`,
-        `/posts/${post_id}`,
+        articleLink,
         {
           post_id: post_id,
-          user_id: user_id
+          user_id: user_id,
+          post_slug: post.slug
         }
       );
     }
@@ -88,9 +91,10 @@ export const likeComment = async (req, res) => {
 
     // Check if comment exists and get author info
     const commentResult = await query(
-      `SELECT c.user_id, c.content, c.post_id, u.username 
+      `SELECT c.user_id, c.content, c.post_id, u.username, p.slug as post_slug
        FROM comments c 
        JOIN users u ON c.user_id = u.id 
+       JOIN posts p ON c.post_id = p.id
        WHERE c.id = $1`,
       [comment_id]
     );
@@ -138,15 +142,18 @@ export const likeComment = async (req, res) => {
       
       const username = userResult.rows[0]?.username || 'Someone';
       
+      const articleLink = comment.post_slug ? `/article/${comment.post_slug}` : `/article/${comment.post_id}`;
+      
       await createNotification(
         comment.user_id,
         'comment_like',
         `${username} liked your comment: "${comment.content.substring(0, 50)}${comment.content.length > 50 ? '...' : ''}"`,
-        `/posts/${comment.post_id}`,
+        articleLink,
         {
           comment_id: comment_id,
           post_id: comment.post_id,
-          user_id: user_id
+          user_id: user_id,
+          post_slug: comment.post_slug
         }
       );
     }

@@ -82,7 +82,7 @@ export class Category {
       );
       
       if (parseInt(checkArticles.rows[0].count) > 0) {
-        throw new Error('ไม่สามารถลบหมวดหมู่ที่มีบทความอยู่ได้');
+        throw new Error('Cannot delete category that has articles');
       }
       
       const result = await query(

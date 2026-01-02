@@ -13,9 +13,17 @@ export const getNotifications = async (req, res) => {
         n.id,
         n.type,
         n.message as content,
-        n.link,
+        CASE 
+          WHEN n.link IS NOT NULL AND n.link != '' AND n.link NOT LIKE '/posts/%' THEN n.link
+          WHEN n.link LIKE '/posts/%' AND p.slug IS NOT NULL THEN '/article/' || p.slug
+          WHEN n.link LIKE '/posts/%' AND p.slug IS NULL THEN '/article/' || (n.data->>'post_id')
+          WHEN p.slug IS NOT NULL THEN '/article/' || p.slug
+          WHEN (n.data->>'post_id') IS NOT NULL THEN '/article/' || (n.data->>'post_id')
+          ELSE n.link
+        END as link,
         n.data,
         n.created_at,
+        p.slug as post_slug,
         COALESCE(u.full_name, u2.full_name) as user_name,
         COALESCE(u.avatar_url, u2.avatar_url) as user_avatar,
         a.full_name as author_name,
@@ -65,7 +73,7 @@ export const markAsRead = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบการแจ้งเตือน'
+        message: 'Notification not found'
       });
     }
 
@@ -79,7 +87,7 @@ export const markAsRead = async (req, res) => {
     console.error('Mark as read error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการทำเครื่องหมายว่าอ่านแล้ว'
+      message: 'Failed to mark notification as read'
     });
   }
 };
@@ -100,13 +108,13 @@ export const markAllAsRead = async (req, res) => {
 
     res.json({
       status: 'success',
-      message: 'ทำเครื่องหมายว่าอ่านทั้งหมดแล้ว'
+      message: 'All notifications marked as read'
     });
   } catch (error) {
     console.error('Mark all as read error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการทำเครื่องหมายว่าอ่านทั้งหมด'
+      message: 'Failed to mark all notifications as read'
     });
   }
 };
@@ -129,19 +137,49 @@ export const deleteNotification = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
-        message: 'ไม่พบการแจ้งเตือน'
+        message: 'Notification not found'
       });
     }
 
     res.json({
       status: 'success',
-      message: 'ลบการแจ้งเตือนสำเร็จ'
+      message: 'Notification deleted successfully'
     });
   } catch (error) {
     console.error('Delete notification error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'เกิดข้อผิดพลาดในการลบการแจ้งเตือน'
+      message: 'Failed to delete notification'
+    });
+  }
+};
+
+/**
+ * ลบการแจ้งเตือนทั้งหมด
+ */
+export const deleteAllNotifications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await db.query(
+      `DELETE FROM notifications 
+       WHERE user_id = $1 
+       RETURNING id`,
+      [userId]
+    );
+
+    res.json({
+      status: 'success',
+      message: 'All notifications deleted successfully',
+      data: {
+        deletedCount: result.rowCount
+      }
+    });
+  } catch (error) {
+    console.error('Delete all notifications error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to delete all notifications'
     });
   }
 };
