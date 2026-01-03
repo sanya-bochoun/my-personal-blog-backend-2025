@@ -9,13 +9,13 @@ export const login = async (req, res) => {
         // ค้นหาผู้ใช้จากอีเมล
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(404).json({ message: 'ไม่พบผู้ใช้' });
+            return res.status(404).json({ message: 'User not found.' });
         }
 
         // ตรวจสอบรหัสผ่าน
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
-            return res.status(401).json({ message: 'รหัสผ่านไม่ถูกต้อง' });
+            return res.status(401).json({ message: 'Invalid password.' });
         }
 
         // สร้าง token
@@ -35,7 +35,7 @@ export const login = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ message: 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ' });
+        res.status(500).json({ message: 'Error logging in.' });
     }
 };
 
@@ -47,6 +47,6 @@ export const checkUserRole = async (req, res) => {
             redirectUrl: user.role === 'admin' ? '/admin' : '/'
         });
     } catch (error) {
-        res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' });
+        res.status(500).json({ message: 'Error checking user role.' });
     }
 }; 

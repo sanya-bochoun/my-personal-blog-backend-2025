@@ -33,13 +33,13 @@ export const sendEmail = async (to, subject, html) => {
 
 // ฟังก์ชันสำหรับส่งอีเมลรีเซ็ตรหัสผ่าน
 export const sendResetPasswordEmail = async (to, resetToken) => {
-  const frontendUrl = 'http://localhost:5173'; // กำหนดค่าแบบ hardcode
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
-  console.log('Generated reset URL:', resetUrl); // เพิ่ม log
+  console.log('Generated reset URL:', resetUrl);
   const html = `
-    <h1>รีเซ็ตรหัสผ่าน</h1>
-    <p>คุณได้ขอรีเซ็ตรหัสผ่านสำหรับบัญชีของคุณ</p>
-    <p>คลิกที่ลิงก์ด้านล่างเพื่อรีเซ็ตรหัสผ่าน:</p>
+    <h1>Reset Password</h1>
+    <p>You have requested to reset your password for your account.</p>
+    <p>Click the link below to reset your password:</p>
     <a href="${resetUrl}" style="
       display: inline-block;
       padding: 10px 20px;
@@ -48,15 +48,41 @@ export const sendResetPasswordEmail = async (to, resetToken) => {
       text-decoration: none;
       border-radius: 5px;
       margin: 20px 0;
-    ">รีเซ็ตรหัสผ่าน</a>
-    <p>ลิงก์นี้จะหมดอายุใน 1 ชั่วโมง</p>
-    <p>หากคุณไม่ได้ขอรีเซ็ตรหัสผ่าน กรุณาละเลยอีเมลนี้</p>
+    ">Reset Password</a>
+    <p>This link will expire in 1 hour.</p>
+    <p>If you did not request a password reset, please ignore this email.</p>
   `;
 
-  return sendEmail(to, 'รีเซ็ตรหัสผ่าน', html);
+  return sendEmail(to, 'Reset Password', html);
+};
+
+// ฟังก์ชันสำหรับส่งอีเมลยืนยันอีเมล
+export const sendVerificationEmail = async (to, verificationToken) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const verifyUrl = `${frontendUrl}/verify-email/${verificationToken}`;
+  console.log('Generated verification URL:', verifyUrl);
+  const html = `
+    <h1>Verify Your Email</h1>
+    <p>Thank you for registering! Please verify your email address to complete your registration.</p>
+    <p>Click the link below to verify your email:</p>
+    <a href="${verifyUrl}" style="
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #28a745;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 20px 0;
+    ">Verify Email</a>
+    <p>This link will expire in 24 hours.</p>
+    <p>If you did not create an account, please ignore this email.</p>
+  `;
+
+  return sendEmail(to, 'Verify Your Email', html);
 };
 
 export default {
   sendEmail,
-  sendResetPasswordEmail
+  sendResetPasswordEmail,
+  sendVerificationEmail
 }; 

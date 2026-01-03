@@ -140,7 +140,10 @@ router.delete('/:id', authorizeEditorOrAdmin, async (req, res) => {
 // PUT /api/admin/users/:id/reset-password - Reset user password (admin only)
 router.put('/:id/reset-password',
   authorizeEditorOrAdmin,
-  body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('newPassword')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

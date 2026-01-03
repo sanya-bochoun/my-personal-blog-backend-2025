@@ -12,6 +12,7 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
 import { testConnection } from './utils/db.mjs';
+import { validateAndExitIfInvalid } from './utils/validateEnv.mjs';
 import routes from './routes/index.mjs';
 import { errorHandler } from './middleware/errorHandler.mjs';
 import { notFoundHandler } from './middleware/notFoundHandler.mjs';
@@ -26,6 +27,9 @@ const __dirname = dirname(__filename);
 
 // Load environment variables
 dotenv.config();
+
+// Validate environment variables
+validateAndExitIfInvalid();
 
 const app = express();
 const PORT = process.env.PORT || 5000;

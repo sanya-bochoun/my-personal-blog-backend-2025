@@ -317,11 +317,20 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // ตรวจสอบความยาวรหัสผ่านใหม่
-    if (newPassword.length < 6) {
+    // ตรวจสอบความยาวและความซับซ้อนของรหัสผ่านใหม่
+    if (newPassword.length < 8) {
       return res.status(400).json({
         status: 'error',
-        message: 'New password must be at least 6 characters long'
+        message: 'New password must be at least 8 characters long'
+      });
+    }
+
+    // ตรวจสอบว่า password มี uppercase, lowercase และตัวเลข
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'New password must contain at least one uppercase letter, one lowercase letter, and one number'
       });
     }
 
